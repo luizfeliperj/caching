@@ -1,4 +1,4 @@
-CFLAGS=-O2 -I.
+CFLAGS=-g -I.
 CC=/usr/bin/gcc
 OBJS:=$(shell /bin/ls *.c | /bin/sed -e 's,\.c,\.o,' -e 's,.*,\.obj/\0,' )
 
