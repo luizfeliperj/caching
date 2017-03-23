@@ -18,11 +18,14 @@ typedef struct st_filecache {
 
 filecache_t global = { 0 };
 
+uint32_t myopen (pFileCache_t , uint32_t, uint32_t, uint8_t *);
 uint32_t mysave (pFileCache_t , uint32_t, uint32_t, const uint8_t *);
 uint32_t add_block (pLinkedList_t *, uint32_t, uint32_t, const uint8_t*);
 
 int main (int argc, char ** argv)
 {
+	uint8_t buffer[101] = { 0 };
+
 	const uint8_t *data = "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
 	const uint32_t datalen = strlen(data);
 
@@ -46,11 +49,69 @@ int main (int argc, char ** argv)
 	mysave (&global, 0, datalen2, data2);
 	mysave (&global, 5, datalen2, data2);
 
+	myopen (&global, 5, 100, buffer);
+	printf ("read: [%s]\n", buffer);
+
+	memset (buffer, 32, sizeof(buffer)-1);
+	myopen (&global, 800, 100, buffer);
+	printf ("read: [%s]\n", buffer);
+
+	memset (buffer, 32, sizeof(buffer)-1);
+	myopen (&global, 128, 10, buffer);
+	printf ("read: [%s]\n", buffer);
+
+	memset (buffer, 32, sizeof(buffer)-1);
+	myopen (&global, 950, 100, buffer);
+	printf ("read: [%s]\n", buffer);
+
 	while (global.list) {
 		printf ("blockid: %d, data: %s\n", global.list->blockid, global.list->data);
 		global.list = global.list->next;
 	}
 	printf ("file sz is: %u\n", global.sz);
+
+	return 0;
+}
+uint32_t myopen (pFileCache_t cache, uint32_t offset, uint32_t len, uint8_t *data) {
+	uint16_t i;
+	float blocks;
+	uint32_t r = 0;
+	
+	blocks = ( offset % CACHEBLOCKSZ + len ) / (float) CACHEBLOCKSZ;
+
+	if (blocks == 0.0)
+		return 0;
+
+	if (( blocks - (int) blocks) > 0.0)
+		blocks = blocks + 1.0;
+
+	for (i = 0; i < (uint16_t) blocks; i++) {
+		uint16_t round;
+		float relablock;
+		linkedlist_t *leaf;
+		uint32_t relaoffset, relalen;
+		uint8_t * reladata = (uint8_t*) data;
+
+		relalen = len - r;
+
+		reladata = reladata + r;
+		relaoffset = offset + r;
+
+		round = CACHEBLOCKSZ - relaoffset%CACHEBLOCKSZ;
+		if (relalen > round) relalen = round;
+
+		for (leaf = cache->list; leaf && leaf->next; leaf = leaf->next) {
+			if ( ( leaf->next->blockid * CACHEBLOCKSZ ) > relaoffset )
+				break;
+		}
+
+		relablock = relaoffset/((float)CACHEBLOCKSZ) - leaf->blockid;
+
+		if ( ( relablock >= 0 ) && ( relablock < 1 ) )
+			memcpy (data + r, leaf->data + (relaoffset % CACHEBLOCKSZ), relalen);
+
+		r = r + relalen;
+	}
 
 	return 0;
 }
@@ -70,22 +131,22 @@ uint32_t mysave (pFileCache_t cache, uint32_t offset, uint32_t len, const uint8_
 		blocks = blocks + 1.0;
 
 	for (i = 0; i < (uint16_t) blocks; i++) {
+		uint16_t round;
 		uint32_t localr;
 		linkedlist_t *leaf;
 		uint32_t relaoffset, relalen;
 		uint8_t * reladata = (uint8_t*) data;
 
 		relalen = len - r;
-		if (i == 0) {
-			int round = CACHEBLOCKSZ - offset%CACHEBLOCKSZ;
-			if (relalen > round) relalen = round;
-		}
 
 		reladata = reladata + r;
 		relaoffset = offset + r;
 
+		round = CACHEBLOCKSZ - relaoffset%CACHEBLOCKSZ;
+		if (relalen > round) relalen = round;
+
 		for (leaf = cache->list; leaf && leaf->next; leaf = leaf->next) {
-			if ( ( leaf->next->blockid * CACHEBLOCKSZ ) >= relaoffset )
+			if ( ( leaf->next->blockid * CACHEBLOCKSZ ) > relaoffset )
 				break;
 			updateroot = 0x0;
 		}
