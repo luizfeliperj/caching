@@ -2,17 +2,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#define BLOCKSZ 64
+#define CACHEBLOCKSZ 64
 #define MALLOCERROR -1
 
-struct linkedlist {
+typedef struct st_linkedlist {
 	uint16_t blockid;
-	uint8_t data[BLOCKSZ];
-	struct linkedlist *prev, *next;
-} *global = NULL;
+	uint8_t data[CACHEBLOCKSZ];
+	struct st_linkedlist *prev, *next;
+} linkedlist_t, *pLinkedList_t;
 
-uint32_t mysave (struct linkedlist **, uint32_t, uint32_t, const uint8_t *);
-uint32_t add_block (struct linkedlist **, uint32_t, uint32_t, const uint8_t*);
+typedef struct st_filecache {
+	uint32_t sz;
+	linkedlist_t *list;
+} filecache_t, *pFileCache_t;
+
+filecache_t global = { 0 };
+
+uint32_t mysave (pFileCache_t , uint32_t, uint32_t, const uint8_t *);
+uint32_t add_block (pLinkedList_t *, uint32_t, uint32_t, const uint8_t*);
 
 int main (int argc, char ** argv)
 {
@@ -39,21 +46,22 @@ int main (int argc, char ** argv)
 	mysave (&global, 0, datalen2, data2);
 	mysave (&global, 5, datalen2, data2);
 
-	while (global) {
-		printf ("blockid: %d, data: %s\n", global->blockid, global->data);
-		global = global->next;
+	while (global.list) {
+		printf ("blockid: %d, data: %s\n", global.list->blockid, global.list->data);
+		global.list = global.list->next;
 	}
+	printf ("file sz is: %u\n", global.sz);
 
 	return 0;
 }
 
-uint32_t mysave (struct linkedlist **root, uint32_t offset, uint32_t len, const uint8_t *data) {
+uint32_t mysave (pFileCache_t cache, uint32_t offset, uint32_t len, const uint8_t *data) {
 	uint16_t i;
 	float blocks;
 	uint32_t r = 0;
 	uint8_t updateroot = 0x1;
 
-	blocks = ( offset % BLOCKSZ + len ) / (float) BLOCKSZ;
+	blocks = ( offset % CACHEBLOCKSZ + len ) / (float) CACHEBLOCKSZ;
 
 	if (blocks == 0.0)
 		return 0;
@@ -63,49 +71,52 @@ uint32_t mysave (struct linkedlist **root, uint32_t offset, uint32_t len, const 
 
 	for (i = 0; i < (uint16_t) blocks; i++) {
 		uint32_t localr;
-		struct linkedlist *leaf;
+		linkedlist_t *leaf;
 		uint32_t relaoffset, relalen;
 		uint8_t * reladata = (uint8_t*) data;
 
 		relalen = len - r;
 		if (i == 0) {
-			int round = BLOCKSZ - offset%BLOCKSZ;
+			int round = CACHEBLOCKSZ - offset%CACHEBLOCKSZ;
 			if (relalen > round) relalen = round;
 		}
 
 		reladata = reladata + r;
 		relaoffset = offset + r;
 
-		for (leaf = *root; leaf && leaf->next; leaf = leaf->next) {
-			if ( ( leaf->next->blockid * BLOCKSZ ) >= relaoffset )
+		for (leaf = cache->list; leaf && leaf->next; leaf = leaf->next) {
+			if ( ( leaf->next->blockid * CACHEBLOCKSZ ) >= relaoffset )
 				break;
 			updateroot = 0x0;
 		}
 
-		localr = add_block(&leaf, relaoffset, (relalen > BLOCKSZ) ? BLOCKSZ : relalen, reladata);
+		localr = add_block(&leaf, relaoffset, (relalen > CACHEBLOCKSZ) ? CACHEBLOCKSZ : relalen, reladata);
 		if (localr == MALLOCERROR)
 			return MALLOCERROR;
 
 		r = r + localr;
 
 		if (updateroot & 0x1)
-			*root = leaf;
+			cache->list = leaf;
 	}
+
+	if (offset + len > cache->sz)
+		cache->sz = offset + len;
 
 	return r;
 }
 
-uint32_t add_block (struct linkedlist **leaf, uint32_t offset, uint32_t len, const uint8_t *data) {
-	struct linkedlist *block;
-	uint16_t blockid = offset/BLOCKSZ;
+uint32_t add_block (linkedlist_t **leaf, uint32_t offset, uint32_t len, const uint8_t *data) {
+	linkedlist_t *block;
+	uint16_t blockid = offset/CACHEBLOCKSZ;
 
 	block = *leaf;
 	if (!block || ( block->blockid != blockid ) ) {
-		block = malloc ( sizeof( struct linkedlist ) );
+		block = malloc ( sizeof( linkedlist_t ) );
 		if (!block)
 			return MALLOCERROR;
 
-		memset (block->data, ' ', BLOCKSZ);
+		memset (block->data, ' ', CACHEBLOCKSZ);
 		block->blockid = blockid;
 	}
 
@@ -122,7 +133,7 @@ uint32_t add_block (struct linkedlist **leaf, uint32_t offset, uint32_t len, con
 		}
 	}
 
-	memcpy (block->data + offset%BLOCKSZ, data, len);
+	memcpy (block->data + offset%CACHEBLOCKSZ, data, len);
 
 	return len;
 }
