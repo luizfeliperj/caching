@@ -18,9 +18,9 @@ typedef struct st_filecache {
 
 filecache_t global = { 0 };
 
-uint32_t myopen (pFileCache_t , uint32_t, uint32_t, uint8_t *);
-uint32_t mysave (pFileCache_t , uint32_t, uint32_t, const uint8_t *);
-uint32_t add_block (pLinkedList_t *, uint32_t, uint32_t, const uint8_t*);
+uint32_t filecache_pull (pFileCache_t, uint32_t, uint32_t, uint8_t *);
+uint32_t filecache_push (pFileCache_t, uint32_t, uint32_t, const uint8_t *);
+uint32_t linkedlist_store (pLinkedList_t *, uint32_t, uint32_t, const uint8_t*);
 
 int main (int argc, char ** argv)
 {
@@ -32,47 +32,53 @@ int main (int argc, char ** argv)
 	const uint8_t *data2 = "aaaaa111xxxAaAa";
 	const uint32_t datalen2 = strlen(data2);
 
-	mysave (&global, 100, datalen, data);
+	filecache_push (&global, 100, datalen, data);
 
-	mysave (&global, 300, datalen, data);
+	filecache_push (&global, 300, datalen, data);
 
-	mysave (&global, 500, datalen, data);
+	filecache_push (&global, 500, datalen, data);
 
-	mysave (&global, 101, 2, "XX");
+	filecache_push (&global, 101, 2, "XX");
 
-	mysave (&global, 480, datalen2, data2);
-	mysave (&global, 525, datalen2, data2);
+	filecache_push (&global, 480, datalen2, data2);
+	filecache_push (&global, 525, datalen2, data2);
 
-	mysave (&global, 1000, datalen2, data2);
-	mysave (&global, 105, 2, "XX");
+	filecache_push (&global, 1000, datalen2, data2);
+	filecache_push (&global, 105, 2, "XX");
 
-	mysave (&global, 0, datalen2, data2);
-	mysave (&global, 5, datalen2, data2);
+	filecache_push (&global, 0, datalen2, data2);
+	filecache_push (&global, 5, datalen2, data2);
 
-	myopen (&global, 5, 100, buffer);
+	filecache_pull (&global, 5, 100, buffer);
+	printf ("read: [%s]\n", buffer);
+
+	filecache_push (&global, 808, 2, "XX");
+
+	memset (buffer, 32, sizeof(buffer)-1);
+	filecache_pull (&global, 800, 100, buffer);
 	printf ("read: [%s]\n", buffer);
 
 	memset (buffer, 32, sizeof(buffer)-1);
-	myopen (&global, 800, 100, buffer);
+	filecache_pull (&global, 700, 100, buffer);
 	printf ("read: [%s]\n", buffer);
 
 	memset (buffer, 32, sizeof(buffer)-1);
-	myopen (&global, 128, 10, buffer);
+	filecache_pull (&global, 128, 10, buffer);
 	printf ("read: [%s]\n", buffer);
 
 	memset (buffer, 32, sizeof(buffer)-1);
-	myopen (&global, 950, 100, buffer);
+	filecache_pull (&global, 980, 100, buffer);
 	printf ("read: [%s]\n", buffer);
 
 	while (global.list) {
-		printf ("blockid: %d, data: %s\n", global.list->blockid, global.list->data);
+		printf ("block: %d, data: %s\n", global.list->blockid, global.list->data);
 		global.list = global.list->next;
 	}
 	printf ("file sz is: %u\n", global.sz);
 
 	return 0;
 }
-uint32_t myopen (pFileCache_t cache, uint32_t offset, uint32_t len, uint8_t *data) {
+uint32_t filecache_pull (pFileCache_t cache, uint32_t offset, uint32_t len, uint8_t *data) {
 	uint16_t i;
 	float blocks;
 	uint32_t r = 0;
@@ -116,7 +122,7 @@ uint32_t myopen (pFileCache_t cache, uint32_t offset, uint32_t len, uint8_t *dat
 	return 0;
 }
 
-uint32_t mysave (pFileCache_t cache, uint32_t offset, uint32_t len, const uint8_t *data) {
+uint32_t filecache_push (pFileCache_t cache, uint32_t offset, uint32_t len, const uint8_t *data) {
 	uint16_t i;
 	float blocks;
 	uint32_t r = 0;
@@ -151,7 +157,7 @@ uint32_t mysave (pFileCache_t cache, uint32_t offset, uint32_t len, const uint8_
 			updateroot = 0x0;
 		}
 
-		localr = add_block(&leaf, relaoffset, (relalen > CACHEBLOCKSZ) ? CACHEBLOCKSZ : relalen, reladata);
+		localr = linkedlist_store(&leaf, relaoffset, (relalen > CACHEBLOCKSZ) ? CACHEBLOCKSZ : relalen, reladata);
 		if (localr == MALLOCERROR)
 			return MALLOCERROR;
 
@@ -167,7 +173,7 @@ uint32_t mysave (pFileCache_t cache, uint32_t offset, uint32_t len, const uint8_
 	return r;
 }
 
-uint32_t add_block (linkedlist_t **leaf, uint32_t offset, uint32_t len, const uint8_t *data) {
+uint32_t linkedlist_store (linkedlist_t **leaf, uint32_t offset, uint32_t len, const uint8_t *data) {
 	linkedlist_t *block;
 	uint16_t blockid = offset/CACHEBLOCKSZ;
 
