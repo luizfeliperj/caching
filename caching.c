@@ -7,8 +7,8 @@
 
 typedef struct st_linkedlist {
 	uint16_t blockid;
-	uint8_t data[CACHEBLOCKSZ];
-	struct st_linkedlist *prev, *next;
+	struct st_linkedlist *next;
+	uint8_t data[CACHEBLOCKSZ + 1];
 } linkedlist_t, *pLinkedList_t;
 
 typedef struct st_filecache {
@@ -18,6 +18,7 @@ typedef struct st_filecache {
 
 filecache_t global = { 0 };
 
+void filecache_free (pFileCache_t);
 uint32_t filecache_pull (pFileCache_t, uint32_t, uint32_t, uint8_t *);
 uint32_t filecache_push (pFileCache_t, uint32_t, uint32_t, const uint8_t *);
 uint32_t linkedlist_store (pLinkedList_t *, uint32_t, uint32_t, const uint8_t*);
@@ -33,7 +34,6 @@ int main (int argc, char ** argv)
 	const uint32_t datalen2 = strlen(data2);
 
 	filecache_push (&global, 100, datalen, data);
-
 	filecache_push (&global, 300, datalen, data);
 
 	filecache_push (&global, 500, datalen, data);
@@ -70,14 +70,28 @@ int main (int argc, char ** argv)
 	filecache_pull (&global, 980, 100, buffer);
 	printf ("read: [%s]\n", buffer);
 
-	while (global.list) {
-		printf ("block: %d, data: %s\n", global.list->blockid, global.list->data);
-		global.list = global.list->next;
+	pLinkedList_t this = global.list;
+	while (this) {
+		printf ("block: %d, data: %s\n", this->blockid, this->data);
+		this = this->next;
 	}
 	printf ("file sz is: %u\n", global.sz);
 
+	filecache_free (&global);
+
 	return 0;
 }
+
+void filecache_free (pFileCache_t cache) {
+	pLinkedList_t this = cache->list, next;
+
+	while (this != NULL) {
+		next = this->next;
+		free (this);
+		this = next;
+	}
+}
+
 uint32_t filecache_pull (pFileCache_t cache, uint32_t offset, uint32_t len, uint8_t *data) {
 	uint16_t i;
 	float blocks;
@@ -184,6 +198,7 @@ uint32_t linkedlist_store (linkedlist_t **leaf, uint32_t offset, uint32_t len, c
 			return MALLOCERROR;
 
 		memset (block->data, ' ', CACHEBLOCKSZ);
+		block->data[CACHEBLOCKSZ]=0;
 		block->blockid = blockid;
 	}
 
