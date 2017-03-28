@@ -1,2 +1,2 @@
 # caching
-implementation of a simple linked list algorithm to used for caching purposes
+implementation of a simple linked list algorithm to be used as backend for caching purposes

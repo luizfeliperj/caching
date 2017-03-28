@@ -8,7 +8,7 @@
 typedef struct st_linkedlist {
 	uint16_t blockid;
 	struct st_linkedlist *next;
-	uint8_t data[CACHEBLOCKSZ + 1];
+	uint8_t data[CACHEBLOCKSZ];
 } linkedlist_t, *pLinkedList_t;
 
 typedef struct st_filecache {
@@ -72,7 +72,9 @@ int main (int argc, char ** argv)
 
 	pLinkedList_t this = global.list;
 	while (this) {
-		printf ("block: %d, data: %s\n", this->blockid, this->data);
+		char data[CACHEBLOCKSZ+1] = { 0 };
+		memcpy (data, this->data, CACHEBLOCKSZ);
+		printf ("block: %d, data: %s\n", this->blockid, data);
 		this = this->next;
 	}
 	printf ("file sz is: %u\n", global.sz);
@@ -198,7 +200,6 @@ uint32_t linkedlist_store (linkedlist_t **leaf, uint32_t offset, uint32_t len, c
 			return MALLOCERROR;
 
 		memset (block->data, ' ', CACHEBLOCKSZ);
-		block->data[CACHEBLOCKSZ]=0;
 		block->blockid = blockid;
 	}
 
